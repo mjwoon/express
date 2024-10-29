@@ -9,6 +9,7 @@ const compression = require('compression')
 
 const template = require('./lib/template.js')
 
+app.use(express.static('public'));
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(compression());
 app.get('*', function (request, response, next) {
@@ -25,40 +26,18 @@ app.get('/', function (request, response) {
     const description = 'Hello, Node.js';
     const list = template.list(request.list);
     const html = template.HTML(title, list,
-        `<h2>${title}</h2>${description}`,
-        `<a href="/create">create</a>`
+        `<h2>${title}</h2>${description}
+            <img src="/images/hello.jpg" style="width:300px; display: block; margin-top: 10px;"`,
+        `<a href="/topic/create">create</a>`
     );
     response.end(html);
 });
 
-app.get('/page/:pageId', function (request, response) {
-    const filteredId = path.parse(request.params.pageId).base;
-    fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
-        const title = request.params.pageId;
-        const sanitizedTitle = sanitizeHtml(title);
-        const sanitizedDescription = sanitizeHtml(description, {
-            allowedTags: ['h1']
-        });
-        const list = template.list(request.list);
-        const html = template.HTML(sanitizedTitle, list,
-            `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`,
-            ` <a href="/create">create</a>
-                <a href="/update/${sanitizedTitle}">update</a>
-                <form action="/delete_process" method="post">
-                  <input type="hidden" name="id" value="${sanitizedTitle}">
-                  <input type="submit" value="delete">
-                </form>`
-        );
-        response.send(html);
-    });
-
-});
-
-app.get('/create', function (request, response) {
+app.get('/topic/create', function (request, response) {
     const title = 'WEB - create';
     const list = template.list(request.list);
     const html = template.HTML(title, list, `
-          <form action="/create_process" method="post">
+          <form action="/topic/create_process" method="post">
             <p><input type="text" name="title" placeholder="title"></p>
             <p>
               <textarea name="description" placeholder="description"></textarea>
@@ -69,25 +48,9 @@ app.get('/create', function (request, response) {
           </form>
         `, '');
     response.send(html);
-
 })
 
-app.post('/create_process', function (request, response) {
-    /*
-    const body = '';
-    request.on('data', function (data) {
-        body = body + data;
-    });
-    request.on('end', function () {
-        const post = qs.parse(body);
-        const title = post.title;
-        const description = post.description;
-        fs.writeFile(`data/${title}`, description, 'utf8', function (err) {
-            response.writeHead(302, {Location: `/?id=${title}`});
-            response.end();
-        });
-    });
-       */
+app.post('/topic/create_process', function (request, response) {
     const post = request.body;
     const title = post.title;
     const description = post.description;
@@ -95,17 +58,16 @@ app.post('/create_process', function (request, response) {
         response.writeHead(302, {Location: `/?id=${title}`});
         response.end();
     });
-
 });
 
-app.get('/update/:pageId', function (request, response) {
+app.get('/topic/update/:pageId', function (request, response) {
     const filteredId = path.parse(request.params.pageId).base;
     fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
         const title = request.params.pageId;
         const list = template.list(request.list);
         const html = template.HTML(title, list,
             `
-            <form action="/update_process" method="post">
+            <form action="/topic/update_process" method="post">
               <input type="hidden" name="id" value="${title}">
               <p><input type="text" name="title" placeholder="title" value="${title}"></p>
               <p>
@@ -116,15 +78,13 @@ app.get('/update/:pageId', function (request, response) {
               </p>
             </form>
             `,
-            `<a href="/create">create</a> <a href="/update?id=${title}">update</a>`
+            `<a href="/topic/create">create</a> <a href="/topic/update/${title}">update</a>`
         );
         response.send(html);
     });
-
-
 });
 
-app.post('/update_process', function (request, response) {
+app.post('/topic/update_process', function (request, response) {
     const post = request.body;
     const id = post.id;
     const title = post.title;
@@ -134,69 +94,50 @@ app.post('/update_process', function (request, response) {
             response.redirect(`/?id=${title}`);
         })
     });
-
 });
 
-app.post('/delete_process', function (request, response) {
+app.post('/topic/delete_process', function (request, response) {
     const post = request.body;
     const id = post.id;
     const filteredId = path.parse(id).base;
     fs.unlink(`data/${filteredId}`, function (error) {
-        response.writeHead(302, {Location: `/`});
-        response.end();
+        response.redirect('/');
     });
+});
 
+app.get('/topic/:pageId', function (request, response, next) {
+    const filteredId = path.parse(request.params.pageId).base;
+    fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
+        if (err) {
+            next(err); // error 던지기
+        } else {
+            const title = request.params.pageId;
+            const sanitizedTitle = sanitizeHtml(title);
+            const sanitizedDescription = sanitizeHtml(description, {
+                allowedTags: ['h1']
+            });
+            const list = template.list(request.list);
+            const html = template.HTML(sanitizedTitle, list,
+                `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`,
+                ` <a href="/topic/create">create</a>
+                <a href="/topic/update/${sanitizedTitle}">update</a>
+                <form action="/topic/delete_process" method="post">
+                  <input type="hidden" name="id" value="${sanitizedTitle}">
+                  <input type="submit" value="delete">
+                </form>`
+            );
+            response.send(html);
+        }
+    });
+});
+
+app.use(function (req, res, next) {
+    res.status(404).send('Sorry cant find that!');
+});
+
+app.use(function(err, req, res, next) {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
 });
 
 app.listen(3000, () => console.log("Example app listening on port 3000"));
-
-// const http = require('http');
-// const fs = require('fs');
-// const url = require('url');
-// const qs = require('querystring');
-// const template = require('./lib/template.js');
-//
-//
-//
-// const app = http.createServer(function(request,response){
-//     const _url = request.url;
-//     const queryData = url.parse(_url, true).query;
-//     const pathname = url.parse(_url, true).pathname;
-//     if(pathname === '/'){
-//       if(queryData.id === undefined){
-//
-//         });
-//       } else {
-//
-//
-//     } else if(pathname === '/create'){
-//
-//       });
-//     } else if(pathname === '/create_process'){
-//
-//       });
-//     } else if(pathname === '/update'){
-//
-//       });
-//     } else if(pathname === '/update_process'){
-//
-//     } else if(pathname === '/delete_process'){
-//       const body = '';
-//       request.on('data', function(data){
-//           body = body + data;
-//       });
-//       request.on('end', function(){
-//           const post = qs.parse(body);
-//           const id = post.id;
-//           const filteredId = path.parse(id).base;
-//           fs.unlink(`data/${filteredId}`, function(error){
-//             response.writeHead(302, {Location: `/`});
-//             response.end();
-//           })
-//       });
-//     } else {
-//       response.writeHead(404);
-//       response.end('Not found');
-//     }
-// });
-// app.listen(3000);
